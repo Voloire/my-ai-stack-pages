@@ -5,8 +5,8 @@ description: "Cosa entra davvero in una GPU consumer, e cosa si impara provandoc
 
 # Uno stack AI interamente locale su 16 GB di VRAM
 
-Questa pagina racconta la costruzione di un ambiente AI completo — conversazione, voce,
-trascrizione, immagini, video — che gira **interamente su una macchina desktop**, senza API a
+Questa pagina racconta la costruzione di un ambiente AI completo, conversazione, voce,
+trascrizione, immagini, video, che gira **interamente su una macchina desktop**, senza API a
 pagamento e senza che un byte di dato esca dal computer.
 
 Non è un tutorial. È il resoconto di cosa è entrato davvero nella scheda, quali decisioni sono
@@ -20,7 +20,7 @@ da una scheda tecnica.
 
 | Componente | Valore |
 |---|---|
-| GPU | NVIDIA RTX 5070 Ti — **16 GB VRAM**, Blackwell sm_120 |
+| GPU | NVIDIA RTX 5070 Ti, **16 GB VRAM**, Blackwell sm_120 |
 | CPU | AMD Ryzen 7 9800X3D (8 core / 16 thread) |
 | RAM | 64 GB DDR5 |
 | OS | Windows 11, WSL2 in modalità *mirrored* |
@@ -38,8 +38,8 @@ modello"* ma *"cosa gli sta accanto"*.
 
 | Modello | Dimensione | Velocità misurata |
 |---|---|---|
-| `qwen3:8b` | 7.7 GB | **126.3 tok/s** — 100% GPU |
-| `qwen3:14b` | 11 GB | 75.5 tok/s — 100% GPU |
+| `qwen3:8b` | 7.7 GB | **126.3 tok/s**, 100% GPU |
+| `qwen3:14b` | 11 GB | 75.5 tok/s, 100% GPU |
 | `qwen3:30b-a3b` | 19 GB | 92 tok/s a contesto 4k, 78.9 a 32k |
 | `qwen3-coder:30b-a3b` | 20 GB | 77 tok/s |
 
@@ -51,7 +51,7 @@ Il contesto è stato fissato a **32768 token** su misura, non a intuito:
 
 | Contesto | Velocità | Costo |
 |---|---|---|
-| 4096 | 96.6 tok/s | — |
+| 4096 | 96.6 tok/s | - |
 | 16384 | 88.3 tok/s | −9% |
 | **32768** | **78.9 tok/s** | **−18%** |
 | 65536 | 64.4 tok/s | −33% |
@@ -65,11 +65,11 @@ lasciare margine: il perché sta nella lezione 3.
 
 | Percorso | Device | Velocità | Uso |
 |---|---|---|---|
-| Riga di comando | GPU, float16 | **30x il tempo reale** — un'ora in 2 minuti | file, sottotitoli |
-| Dentro l'interfaccia | CPU, int8 | 2.6x — un'ora in 23 minuti | dettatura dal microfono |
+| Riga di comando | GPU, float16 | **30x il tempo reale**: un'ora in 2 minuti | file, sottotitoli |
+| Dentro l'interfaccia | CPU, int8 | 2.6x: un'ora in 23 minuti | dettatura dal microfono |
 
 La versione su CPU sembra una rinuncia e non lo è: elimina alla radice il conflitto di memoria
-con il modello linguistico, che si manifesterebbe nel momento peggiore — premere il microfono
+con il modello linguistico, che si manifesterebbe nel momento peggiore: premere il microfono
 mentre stai conversando, con la GPU già piena. Per una frase dettata di dieci secondi la CPU
 risponde in quattro, che basta.
 
@@ -81,7 +81,7 @@ opzioni, solo la quantizzazione diversa:
 
 Per questo i file veri passano dalla riga di comando, non dall'interfaccia.
 
-Accetta in ingresso qualunque cosa ffmpeg sappia decodificare — verificato su `mp3`, `m4a`,
+Accetta in ingresso qualunque cosa ffmpeg sappia decodificare, verificato su `mp3`, `m4a`,
 `ogg`, `flac` e sui contenitori video `mp4`, `mkv`, `webm`.
 
 ### Voce
@@ -90,8 +90,8 @@ Accetta in ingresso qualunque cosa ffmpeg sappia decodificare — verificato su 
 audio in 2.6, quindi più veloce del tempo reale.
 
 Una scoperta che cambia il modo di usarlo: **l'accento non viene dal codice lingua, viene dalla
-voce di riferimento**. Il parametro `language` governa fonetica e prosodia; l'accento —
-americano, britannico — dipende da quale campione vocale si usa. Il corollario è potente: la
+voce di riferimento**. Il parametro `language` governa fonetica e prosodia, mentre l'accento (americano,
+britannico) dipende da quale campione vocale si usa. Il corollario è potente: la
 stessa voce parla tutte le lingue, quindi dieci secondi della propria voce diventano voice
 cloning multilingua.
 
@@ -119,7 +119,7 @@ upscaling, ControlNet, LoRA, batch. Ci si va quando l'immagine *è* il prodotto.
 **Una GUI scritta su misura** per il doppiaggio di registrazioni: si carica un audio o un video,
 si scelgono lingua di partenza, lingua di arrivo e cartella di destinazione, e si ottengono
 trascrizione, traduzione e audio ridetto nella lingua scelta. Ottanta righe di libreria standard
-Python — nessun pip, nessuna dipendenza da mantenere — perché deve invocare gli eseguibili sul
+Python, nessun pip, nessuna dipendenza da mantenere: perché deve invocare gli eseguibili sul
 filesystem e da dentro un container non li raggiungerebbe.
 
 **Un proxy di rilevamento lingua**, il pezzo più interessante del progetto. Open WebUI, parlando
@@ -131,8 +131,8 @@ Il proxy si mette in mezzo, deduce la lingua e **segmenta il testo misto**. Perc
 reale è didattico: il modello risponde in giapponese e aggiunge la traduzione italiana tra
 parentesi, e ogni parte va pronunciata nella sua lingua.
 
-Il rilevamento lavora su due livelli. Le lingue con alfabeto proprio — cirillico, kana, hangul,
-arabo, greco, devanagari — sono inequivocabili dal sistema di scrittura. Per quelle in alfabeto
+Il rilevamento lavora su due livelli. Le lingue con alfabeto proprio, cirillico, kana, hangul,
+arabo, greco, devanagari, sono inequivocabili dal sistema di scrittura. Per quelle in alfabeto
 latino serve un punteggio sulle parole funzionali, con una soglia di confidenza: senza,
 `(Konnichiwa, minna-san!)` finiva classificato **portoghese**, perché le sillabe `o` e `a`
 combaciano con gli articoli portoghesi. Sotto soglia si ripiega, e la direzione del ripiego
@@ -150,12 +150,12 @@ un'ipotesi.
 ## Il modello per il codice
 
 `qwen3-coder:30b-a3b` è post-addestrato per l'uso agentico sul codice: navigare file, invocare
-strumenti, applicare patch su più turni. Dichiara `capabilities: [completion, tools]` — supporta
+strumenti, applicare patch su più turni. Dichiara `capabilities: [completion, tools]`, supporta
 il tool calling, che è il prerequisito per usarlo come agente.
 
 Ma non ha il **thinking**, che il generalista possiede. Su una traduzione idiomatica o su un
-problema tortuoso quella differenza si sente, e per questo è la scelta *peggiore* per tradurre —
-un difetto che si era insinuato come default nell'interfaccia e che è stato corretto.
+problema tortuoso quella differenza si sente, e per questo è la scelta *peggiore* per tradurre. Un difetto che si era insinuato come
+default nell'interfaccia e che è stato corretto.
 
 Il limite realistico va detto: questi modelli sono forti su autocomplete, boilerplate, singole
 funzioni, spiegazione di codice e generazione di test. Su refactoring multi-file e bug non ovvi
@@ -206,7 +206,7 @@ nonostante fosse configurato altrimenti, e la dettatura girava sul modello peggi
 **6. Quattro problemi distinti sulla stessa funzione, tutti con risposta `200 OK`.** Far
 funzionare la voce ha richiesto di risolvere in sequenza: il parametro lingua non trasmesso, un
 modello che era solo inglese e *ignorava quel parametro in silenzio*, una libreria fonetica
-assente, e un formato audio sbagliato — WAV etichettato mp3, che il browser non decodifica.
+assente, e un formato audio sbagliato: WAV etichettato mp3, che il browser non decodifica.
 Ognuno mascherava il successivo: senza risolvere il primo non si vedeva il secondo.
 
 **7. La verbosità è un problema di prestazioni.** Una richiesta di *una frase* generava una
@@ -246,25 +246,17 @@ comfyui/                     workflow testati per immagini e video
 open-webui/                   configurazione del container
 ```
 
-Due script gestiscono l'intero ciclo di vita. Lo spegnimento libera **tutte** le risorse — GPU,
-RAM e macchina virtuale — perché il presupposto è che chi lo lancia abbia bisogno del computer
+Due script gestiscono l'intero ciclo di vita. Lo spegnimento libera **tutte** le risorse, GPU,
+RAM e macchina virtuale: perché il presupposto è che chi lo lancia abbia bisogno del computer
 per altro.
 
 ---
 
-## Cosa non è stato fatto
-
-La **diarizzazione** per i meeting a più voci, che richiede un componente aggiuntivo e
-distinguerebbe chi parla. I **sottotitoli tradotti** con timestamp preservati: è un problema
-meno banale di quanto sembri, perché tradurre riscrive la segmentazione delle frasi. E il
-supporto per modelli video di qualità superiore, che scambia secondi con minuti.
-
----
 
 ## La conclusione onesta
 
 Su una GPU consumer si può costruire un ambiente AI locale sorprendentemente completo, e per una
-fascia di lavoro reale — volume, privacy, costo marginale zero, funzionamento offline — è
+fascia di lavoro reale, volume, privacy, costo marginale zero, funzionamento offline, è
 genuinamente competitivo.
 
 Ma va detto con chiarezza dove sta il confine. Questi modelli non sostituiscono quelli di
