@@ -2,7 +2,7 @@
 
 Questo repository contiene una sola pagina, pubblicata con GitHub Pages:
 
-**https://voloire.github.io/ai-local-pages/**
+**https://voloire.github.io/my-ai-stack-pages/**
 
 Racconta la costruzione di un ambiente AI interamente locale — conversazione, voce,
 trascrizione, immagini, video — su una GPU consumer da 16 GB: cosa entra davvero in scheda,
