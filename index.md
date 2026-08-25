@@ -99,26 +99,55 @@ Per questo i file veri passano dalla riga di comando, non dall'interfaccia.
 Accetta in ingresso qualunque cosa ffmpeg sappia decodificare, verificato su `mp3`, `m4a`,
 `ogg`, `flac` e sui contenitori video `mp4`, `mkv`, `webm`.
 
-**Le registrazioni con più tracce audio hanno un percorso dedicato**, perché è il caso di una
-riunione registrata bene: una traccia per il microfono, una per l'audio delle applicazioni. Un
-file da nove gigabyte non si carica nel browser, quindi si indica dov'è; l'interfaccia legge le
-tracce e dice quali sono utili, distinguendo il mix, le sorgenti distinte, quelle vuote e i
-doppioni identici bit per bit, che nascono dalle assegnazioni multiple nel software di
-registrazione.
+### Dalla riunione registrata al dialogo scritto
 
-Poi c'è il problema che nessuno si aspetta: **senza cuffie il microfono riprende anche l'audio
-delle casse**, quindi metà delle frasi degli altri finisce nella propria traccia, e attribuirle
-a chi registra è sbagliato. Su due ore di riunione erano 1199 battute su 1390. Si tolgono
-confrontando il livello delle due tracce battuta per battuta: dove domina quella delle
-applicazioni, la voce arriva da loro. Sui tratti lunghi funziona; su battute di due parole
-sovrapposte sbaglia in entrambe le direzioni, e lì il rimedio non è un parametro migliore, sono
-le cuffie.
+Il caso d'uso che ha guidato più scelte di tutti: una riunione di due ore, registrata con OBS
+su più tracce audio, che deve diventare un testo leggibile con la frase giusta accanto alla
+voce giusta. Non è una funzione sola: è una catena di cinque passaggi, ognuno nato da un
+problema incontrato davvero.
 
-L'ultimo pezzo della catena è **chi parla quando**: dentro la traccia degli altri, i singoli
-partecipanti vengono distinti e etichettati, battuta per battuta, da un modello di diarizzazione
-che gira in locale come tutto il resto. Sessanta volte il tempo reale, e la memoria video che
-occupa torna libera appena finisce. Il risultato è un dialogo leggibile: la propria voce da una
-parte, e ogni altro partecipante con la sua etichetta.
+**Le tracce si riconoscono misurandole, non leggendo i metadati.** Una registrazione OBS
+arriva con cinque tracce e nessuna etichetta affidabile. Un file da nove gigabyte non si
+carica nel browser, quindi si indica dov'è: l'interfaccia le ascolta e dichiara cosa sono, il
+mix (la più forte), le sorgenti distinte, le vuote, e i doppioni identici bit per bit che
+nascono dalle assegnazioni multiple nel software di registrazione.
+
+**Quale traccia è il microfono lo dice il silenzio, non il volume.** Una traccia di
+applicazione scende nel silenzio digitale quando nessuno parla; un microfono aperto non ci
+arriva mai. È un criterio più robusto di qualunque confronto di livelli, e quando non basta,
+su una registrazione corta dove nessuno tace mai, l'interfaccia dichiara di non saperlo invece
+di indovinare. Sbagliare qui vorrebbe dire depurare la traccia sbagliata, cancellando proprio
+la voce da tenere.
+
+**Senza cuffie il microfono riprende anche l'audio delle casse**, quindi metà delle frasi
+degli altri finisce nella propria traccia, e attribuirle a chi registra è sbagliato. Su due
+ore di riunione erano 1199 battute su 1390: senza questo filtro, l'86% delle frasi altrui
+risultava in bocca a chi registrava. Si tolgono confrontando il livello delle due tracce
+battuta per battuta: dove domina quella delle applicazioni, la voce arriva da loro. Sui tratti
+lunghi funziona; su battute di due parole sovrapposte sbaglia in entrambe le direzioni, e lì
+il rimedio non è un parametro migliore, sono le cuffie.
+
+**Chi parla quando, dentro la traccia degli altri.** I partecipanti che stanno tutti in una
+traccia sola vengono distinti e etichettati da un modello di diarizzazione che gira in locale
+come il resto: sessanta volte il tempo reale, e i quasi quattro gigabyte di memoria video che
+occupa tornano liberi appena finisce, perché gira come processo separato che muore a lavoro
+concluso. I pesi vengono da modelli ad accesso controllato su Hugging Face: gratuiti, ma
+dietro consensi da accettare a mano, e i consensi necessari sono **tre e non due**, perché la
+versione recente della pipeline prende un componente da un deposito che nessuna guida nomina.
+La trappola annessa: un token senza il permesso giusto risponde `200` alle richieste di
+metadati e `403` al download dei file, che è il modo perfetto di sembrare configurati senza
+esserlo.
+
+**La composizione finale è un dialogo.** Le battute della propria voce, depurate dal rientro,
+si intrecciano con quelle degli altri, etichettate per voce, in un testo solo con gli orari:
+
+    [00:13:22] IO: ...
+    [00:13:31] VOCE 2: ...
+
+Le battute consecutive della stessa voce diventano un turno, perché il botta e risposta si
+legge nei cambi di voce, non in cinquemila righe da tre parole. Due ore di riunione diventano
+un documento così in tre minuti di macchina, senza che un secondo di audio esca dal computer:
+per una riunione di lavoro vera non è un dettaglio, è il requisito.
 
 ### Voce
 
