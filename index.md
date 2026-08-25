@@ -99,12 +99,32 @@ Per questo i file veri passano dalla riga di comando, non dall'interfaccia.
 Accetta in ingresso qualunque cosa ffmpeg sappia decodificare, verificato su `mp3`, `m4a`,
 `ogg`, `flac` e sui contenitori video `mp4`, `mkv`, `webm`.
 
+Dalla stessa passata escono, a scelta, **i sottotitoli** in SRT e VTT, **i capitoli per
+YouTube** ricavati dai momenti annunciati a voce, e **i sottotitoli tradotti** in un'altra
+lingua. Sulla traduzione c'è una scelta di progetto che fa la differenza fra un sottotitolo che
+regge e uno che slitta: il modello traduce il testo e sceglie il numero della battuta, ma
+**l'orario lo copia il codice**. I timestamp restano identici al millesimo attraverso la
+traduzione, perché non passano mai da un modello.
+
 ### Dalla riunione registrata al dialogo scritto
 
 Il caso d'uso che ha guidato più scelte di tutti: una riunione di due ore, registrata con OBS
 su più tracce audio, che deve diventare un testo leggibile con la frase giusta accanto alla
 voce giusta. Non è una funzione sola: è una catena di cinque passaggi, ognuno nato da un
 problema incontrato davvero.
+
+Alla base c'è una registrazione fatta bene, e farla bene costa zero: OBS con **una traccia per
+sorgente**, il microfono su una, l'audio della sola applicazione della call su un'altra, presa
+con la cattura per processo, così notifiche e suoni di sistema restano fuori. Una terza traccia
+col mix di tutto fa da rete di sicurezza. Contenitore MKV e non MP4, perché l'MP4 scrive
+l'indice alla fine e un blackout lo rende illeggibile, mentre l'MKV troncato si apre lo stesso.
+Quello che OBS cattura non passa dalle casse: è il flusso digitale prelevato prima che diventi
+suono, qualità identica all'originale.
+
+Da lì in poi il lavoro sporco lo fa **ffmpeg, e nient'altro**: legge quante tracce ci sono,
+estrae quella scelta in un WAV pulito per il trascrittore, misura i profili di livello con cui
+si decide chi è il microfono e cosa è rientro. Nessuna libreria audio da mantenere: un
+eseguibile che c'è già e fa tutte e tre le cose.
 
 **Le tracce si riconoscono misurandole, non leggendo i metadati.** Una registrazione OBS
 arriva con cinque tracce e nessuna etichetta affidabile. Un file da nove gigabyte non si
@@ -153,6 +173,13 @@ per una riunione di lavoro vera non è un dettaglio, è il requisito.
 
 **Chatterbox Multilingual**, 23 lingue, in un container dedicato. Sintetizza 6.2 secondi di
 audio in 2.6, quindi più veloce del tempo reale.
+
+La configurazione vocale è un equilibrio misurato dentro i sedici gigabyte: un modello
+linguistico da 8 miliardi accanto al motore vocale, entrambi in GPU, 126 token al secondo e 2.6
+secondi per frase sintetizzata. Un modello più grande sarebbe più profondo e manderebbe tutto in
+paginazione: per una conversazione parlata la reattività conta più della profondità, e le
+risposte a voce sono per natura brevi. La sintesi parte frase per frase, quindi si comincia ad
+ascoltare mentre il resto si sta ancora generando.
 
 Una scoperta che cambia il modo di usarlo: **l'accento non viene dal codice lingua, viene dalla
 voce di riferimento**. Il parametro `language` governa fonetica e prosodia, mentre l'accento (americano,
@@ -226,6 +253,51 @@ dipende da chi domina il messaggio:
 Il conteggio dei caratteri distingue i due casi meglio di qualunque euristica sul testo.
 **Ventidue test** coprono questi comportamenti, ognuno nato da un difetto osservato e non da
 un'ipotesi.
+
+---
+
+## Gli agenti locali
+
+I modelli non restano chiusi nella chat: possono toccare il filesystem, dentro regole precise.
+
+Il cuore è **un loop di tool calling scritto in sola libreria standard**, senza framework di
+orchestrazione. Non per purismo: i modelli locali, messi alla prova sui framework più diffusi,
+producono codice dalla forma perfetta con import che non esistono, quindi il codice che dà loro
+strumenti e permessi deve essere leggibile per intero da un umano. Ogni agente dichiara tre
+cose, e nessuna è opzionale: **la cartella oltre la quale non vede niente**, **la lista bianca
+dei comandi** che può eseguire, e **il registro** di ogni lettura e scrittura. Un agente che
+deve solo rispondere a domande nasce in sola lettura: uno strumento che non c'è non può essere
+usato male.
+
+Quello che questi agenti leggono è la parte che è costata di più:
+
+- **i PDF veri**, compresi quelli prodotti dagli strumenti da ufficio, dove il testo è una
+  sequenza di codici a due byte e la tabella per tradurli sta nel PDF stesso. Senza quella
+  tabella l'estrazione produce spazzatura: 7.9 milioni di caratteri di rumore da un file di
+  1.4 megabyte, nel caso che ha costretto a implementarla
+- **i documenti Office**, che sono archivi di XML e si aprono senza dipendenze
+- **le tabelle incollate come screenshot**, che per qualunque ricerca testuale non esistono:
+  sono pixel. Quelle le trascrive il modello che vede, immagine per immagine, e i PNG dentro i
+  PDF si ricostruiscono al volo dai flussi compressi, perché il formato interno è lo stesso
+- e quando un file non si può leggere, l'agente lo **dichiara non verificabile** invece di
+  concludere che il contenuto non c'è. Non aver trovato non è aver dimostrato l'assenza
+
+Sopra il telaio ci sono due modi d'uso. **Un comando che interroga una cartella**: si indica la
+cartella, si fa una domanda, e l'agente elenca, legge quello che serve e risponde citando i
+file da cui viene ogni affermazione. **Un agente non presidiato** che legge una cartella di
+ingresso e mantiene un indice delle decisioni: parte, fa il suo, finisce, com'è giusto per un
+lavoro pianificato.
+
+Per lavorare sul codice in coppia c'è **Aider sulla stessa istanza locale**: si apre nel repo,
+si descrive la modifica, e il modello la applica commit dopo commit. Anche qui la scelta del
+modello è stata misurata invece che supposta, su un compito agentico reale di lettura,
+estrazione e scrittura: il modello del codice, con il ragionamento spento, **non chiama gli
+strumenti affatto**; con il ragionamento acceso fa tre su tre in quindici secondi. Il default
+del telaio applica questa misura da sé, modello per modello.
+
+C'è infine un limite di bilancio dichiarato: il materiale letto si accumula nel contesto, e
+quando lo riempie l'agente smette di leggere e **consegna una risposta parziale dicendo che è
+parziale**, invece di continuare a girare a vuoto o di fingere completezza.
 
 ---
 
