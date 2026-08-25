@@ -1,6 +1,17 @@
+# Configurazione GitHub Pages.
+# Per pubblicare: Settings -> Pages -> Source: Deploy from a branch,
+# branch main, cartella /docs. Il repo deve essere pubblico, oppure
+# serve un piano che consenta Pages su repository privati.
+
 title: Stack AI locale su 16 GB di VRAM
 description: >-
   Cosa entra davvero in una GPU consumer, e cosa si impara provandoci:
   misure, decisioni e dieci trappole diagnostiche.
 theme: jekyll-theme-primer
 lang: it
+
+# Niente di questo repo va pubblicato oltre la pagina.
+exclude:
+  - "*.bat"
+  - "*.ps1"
+  - "*.cmd"

@@ -36,16 +36,23 @@ modello"* ma *"cosa gli sta accanto"*.
 
 ### Linguaggio
 
-| Modello | Dimensione | Velocità misurata |
-|---|---|---|
-| `qwen3:8b` | 7.7 GB | **126.3 tok/s**, 100% GPU |
-| `qwen3:14b` | 11 GB | 75.5 tok/s, 100% GPU |
-| `qwen3:30b-a3b` | 19 GB | 92 tok/s a contesto 4k, 78.9 a 32k |
-| `qwen3-coder:30b-a3b` | 20 GB | 77 tok/s |
+Tre modelli, uno per ruolo. Il parco è passato da cinque a tre dopo una prova che ha misurato
+cosa **sanno** invece di quanto corrono:
 
-Il risultato controintuitivo: **il modello da 8 miliardi è il più rapido dei quattro**, più del
-30B a mistura di esperti. Non perché sia intrinsecamente più veloce, ma perché è l'unico che
-entra in VRAM lasciando spazio al motore vocale. È il primo esempio del principio di sopra.
+| Modello | Ruolo | Dimensione | Velocità misurata |
+|---|---|---|---|
+| MoE da 35B, 3 attivi | il predefinito, tutti i giorni | 23 GB | 74 tok/s |
+| MoE da 21B, 3.6 attivi | il codice | 13 GB | **161 tok/s**, interamente in GPU |
+| denso da 8B | la voce | 5.2 GB | 126.3 tok/s |
+
+Il risultato controintuitivo: **il modello da 8 miliardi è il più rapido di quelli grandi che
+c'erano prima**, non perché sia intrinsecamente veloce, ma perché è l'unico che entra in VRAM
+lasciando spazio al motore vocale. È il primo esempio del principio di sopra.
+
+Il secondo esempio è la scelta del predefinito, che non è il più rapido: è quello che **usa gli
+strumenti**. Davanti a un indirizzo che non conosce va ad aprirlo, mentre il candidato più veloce
+rispondeva a memoria e negava. Con il tool calling nativo, un modello che non chiama lo strumento
+rende inutile tutta la catena della ricerca.
 
 Il contesto è stato fissato a **32768 token** su misura, non a intuito:
 
@@ -56,8 +63,16 @@ Il contesto è stato fissato a **32768 token** su misura, non a intuito:
 | **32768** | **78.9 tok/s** | **−18%** |
 | 65536 | 64.4 tok/s | −33% |
 
-Ottuplicare il contesto costa il 18%. I 65536 sono stati scartati non per la velocità, ma per
-lasciare margine: il perché sta nella lezione 3.
+Ottuplicare il contesto costa il 18%. I 65536 sono stati scartati non per la velocità ma per
+lasciare margine, e una misura successiva ha dato ragione a quella scelta: a 65536 il modello non
+sta più in scheda, e il monitor dichiara il 42% del lavoro sulla CPU.
+
+C'è un corollario che vale per qualunque documento lungo: **un testo più lungo del contesto viene
+troncato in silenzio.** Una trascrizione da 42000 token, con il contesto a 32768, ne ha lasciati
+passare 16386: il modello ha risposto sul 40% del testo, tenendo la fine e buttando l'inizio, e
+la risposta era buona. Buona e parziale, che è il modo peggiore di essere sbagliata. Il numero da
+guardare è quello dei token che il motore dichiara di aver letto, non la qualità della
+risposta.
 
 ### Trascrizione
 
@@ -65,7 +80,7 @@ lasciare margine: il perché sta nella lezione 3.
 
 | Percorso | Device | Velocità | Uso |
 |---|---|---|---|
-| Riga di comando | GPU, float16 | **30x il tempo reale**: un'ora in 2 minuti | file, sottotitoli |
+| Riga di comando | GPU, float16 | **da 30 a 46x il tempo reale**: due ore in tre minuti | file, sottotitoli |
 | Dentro l'interfaccia | CPU, int8 | 2.6x: un'ora in 23 minuti | dettatura dal microfono |
 
 La versione su CPU sembra una rinuncia e non lo è: elimina alla radice il conflitto di memoria
@@ -84,6 +99,27 @@ Per questo i file veri passano dalla riga di comando, non dall'interfaccia.
 Accetta in ingresso qualunque cosa ffmpeg sappia decodificare, verificato su `mp3`, `m4a`,
 `ogg`, `flac` e sui contenitori video `mp4`, `mkv`, `webm`.
 
+**Le registrazioni con più tracce audio hanno un percorso dedicato**, perché è il caso di una
+riunione registrata bene: una traccia per il microfono, una per l'audio delle applicazioni. Un
+file da nove gigabyte non si carica nel browser, quindi si indica dov'è; l'interfaccia legge le
+tracce e dice quali sono utili, distinguendo il mix, le sorgenti distinte, quelle vuote e i
+doppioni identici bit per bit, che nascono dalle assegnazioni multiple nel software di
+registrazione.
+
+Poi c'è il problema che nessuno si aspetta: **senza cuffie il microfono riprende anche l'audio
+delle casse**, quindi metà delle frasi degli altri finisce nella propria traccia, e attribuirle
+a chi registra è sbagliato. Su due ore di riunione erano 1199 battute su 1390. Si tolgono
+confrontando il livello delle due tracce battuta per battuta: dove domina quella delle
+applicazioni, la voce arriva da loro. Sui tratti lunghi funziona; su battute di due parole
+sovrapposte sbaglia in entrambe le direzioni, e lì il rimedio non è un parametro migliore, sono
+le cuffie.
+
+L'ultimo pezzo della catena è **chi parla quando**: dentro la traccia degli altri, i singoli
+partecipanti vengono distinti e etichettati, battuta per battuta, da un modello di diarizzazione
+che gira in locale come tutto il resto. Sessanta volte il tempo reale, e la memoria video che
+occupa torna libera appena finisce. Il risultato è un dialogo leggibile: la propria voce da una
+parte, e ogni altro partecipante con la sua etichetta.
+
 ### Voce
 
 **Chatterbox Multilingual**, 23 lingue, in un container dedicato. Sintetizza 6.2 secondi di
@@ -101,26 +137,43 @@ cloning multilingua.
 stata scelta al posto della fp8 all-in-one da 17 GB perché quest'ultima non sta in scheda e
 verrebbe continuamente paginata.
 
-**LTX-Video 2B distilled**: quattro secondi di video, 97 fotogrammi a 768×512, generati in
-**2.1 secondi** a modello caldo. Più veloce del tempo reale del filmato prodotto. La stima
-iniziale era "decine di secondi": sbagliata di un ordine di grandezza, in meglio.
+**Qwen-Image** accanto a Flux, non al suo posto: sei volte più lento (95 secondi contro 15) e
+molto più fedele a quello che hai scritto. Sullo stesso prompt Flux ha inquadrato una finestra e
+ignorato il resto della scena richiesta, mentre Qwen-Image ha costruito la stanza. La sorpresa è
+che sul testo dentro l'immagine ha vinto Flux, cioè esattamente l'aspettativa contraria. Si tiene
+Flux per iterare su un'idea e Qwen-Image quando la composizione conta.
+
+**LTX-Video**: quattro secondi di video, 97 fotogrammi a 768×512, generati in **12 secondi** con
+il modello da 2 miliardi di parametri. Il 13B in fp8 costa il doppio del tempo e ha sei volte i
+parametri: la differenza non è che il video sia più bello, è che **capisce cosa gli hai chiesto**.
+Il prompt diceva "piallare" e solo il grande ha messo in mano una pialla riconoscibile, con i
+riccioli di legno invece di granuli sparsi. Restano entrambi, per lo stesso motivo delle
+immagini.
 
 ---
 
 ## Le interfacce
 
-**Open WebUI** è il posto di lavoro quotidiano: conversazione, ricerca web con DuckDuckGo senza
-chiavi API, RAG sui documenti, dettatura, esecuzione di codice. Espone anche chiavi API proprie,
-generate localmente.
+**Open WebUI** è il posto di lavoro quotidiano: conversazione, RAG sui documenti allegati e
+dettatura. La ricerca web passa da **un motore di ricerca in casa**, in un container, non da un
+servizio esterno: sulla stessa domanda il connettore pubblico dava tre risultati, di cui due
+video, mentre l'aggregatore locale ne dà trenta con le recensioni delle testate in cima. Non
+vuole chiavi API e la query non esce verso qualcuno che la registra.
+
+Il resto delle integrazioni è stato **scorporato**, e il motivo è misurabile: con
+l'autocompletamento attivo ogni pausa di digitazione genera una richiesta al modello, e titoli,
+tag e domande di completamento ne aggiungono altre tre per messaggio. Su una GPU dove il modello
+sta a filo, quelle richieste si mettono in fila davanti alla tua: in una sessione si leggono
+dodici chiamate, con una da 34 minuti. Dopo la pulizia: una sola chiamata per messaggio.
 
 **ComfyUI** è lo studio per le immagini e i video: seed riproducibili, img2img, inpainting,
 upscaling, ControlNet, LoRA, batch. Ci si va quando l'immagine *è* il prodotto.
 
 **Una GUI scritta su misura** per il doppiaggio di registrazioni: si carica un audio o un video,
 si scelgono lingua di partenza, lingua di arrivo e cartella di destinazione, e si ottengono
-trascrizione, traduzione e audio ridetto nella lingua scelta. Ottanta righe di libreria standard
-Python, nessun pip, nessuna dipendenza da mantenere: perché deve invocare gli eseguibili sul
-filesystem e da dentro un container non li raggiungerebbe.
+trascrizione, traduzione e audio ridetto nella lingua scelta. Sola libreria standard Python,
+nessuna dipendenza da mantenere, e gira sull'host perché deve invocare gli eseguibili sul
+filesystem: da dentro un container non li raggiungerebbe.
 
 **Un proxy di rilevamento lingua**, il pezzo più interessante del progetto. Open WebUI, parlando
 con un endpoint TTS compatibile OpenAI, invia solo il testo e la voce. Chatterbox ha bisogno di
@@ -147,20 +200,31 @@ un'ipotesi.
 
 ---
 
-## Il modello per il codice
+## Il modello per il codice, scelto due volte
 
-`qwen3-coder:30b-a3b` è post-addestrato per l'uso agentico sul codice: navigare file, invocare
-strumenti, applicare patch su più turni. Dichiara `capabilities: [completion, tools]`, supporta
-il tool calling, che è il prerequisito per usarlo come agente.
+La prima scelta è stata fatta sull'etichetta: un modello post-addestrato per l'uso agentico sul
+codice, con il punteggio più alto su SWE-bench Verified fra quelli che entrano in 16 GB. Sembrava
+ovvio.
 
-Ma non ha il **thinking**, che il generalista possiede. Su una traduzione idiomatica o su un
-problema tortuoso quella differenza si sente, e per questo è la scelta *peggiore* per tradurre. Un difetto che si era insinuato come
-default nell'interfaccia e che è stato corretto.
+Messo alla prova su dodici domande da sviluppatore senior, non ha vinto **nessuna** delle dodici.
+Su Terraform rinominava una risorsa creandone una seconda e chiamando la CLI del provider da un
+`null_resource`, dove la risposta era il blocco `moved`. Su un test di proprietà scriveva le
+funzioni annidate dentro un'altra funzione di test, che pytest non esegue mai: una suite che
+passa sempre senza provare niente.
 
-Il limite realistico va detto: questi modelli sono forti su autocomplete, boilerplate, singole
-funzioni, spiegazione di codice e generazione di test. Su refactoring multi-file e bug non ovvi
-non tengono il passo. La collocazione giusta è affiancarli a un IDE, non sostituire un modello di
-frontiera.
+Il benchmark non era sbagliato: misurava un'altra cosa. Valuta la risoluzione di issue in
+repository Python con i test come giudice, e nessuna di quelle aree è quel compito. Un punteggio
+alto là non dice niente su quanto è vecchia l'API di un provider che il modello ricorda.
+
+Adesso il modello per il codice è un MoE da 21 miliardi di parametri con 3.6 attivi, che sta
+interamente in GPU lasciando 2.3 GB di margine e genera a 161 token al secondo. Ha prodotto la
+migliore risposta dell'intera prova, sull'unica domanda in cui contava conoscere una parte del
+linguaggio invece di ricordare una libreria.
+
+Il limite realistico resta, e vale per tutti: su refactoring multi-file e bug non ovvi non
+tengono il passo. E su tre framework di orchestrazione molto diffusi nessuno dei modelli locali
+provati è utilizzabile: producono codice dalla forma perfetta con import che non esistono, e il
+difetto non si vede leggendo, si vede quando parte.
 
 ---
 
@@ -181,7 +245,7 @@ unica variabile la memoria occupata *prima* del caricamento:
 In tutti e tre i casi lo strumento di monitoraggio dichiarava `77% GPU`. La causa è il driver
 WDDM di Windows, che non rifiuta un'allocazione più grande della memoria disponibile: la pagina
 in RAM di sistema attraverso il PCIe, in silenzio. Il modello crede di essere in GPU e invece
-striscia sul bus. Nel caso reale il colpevole era un videogioco aperto in un'altra finestra.
+striscia sul bus. Nel caso reale il colpevole era un'applicazione 3D aperta in un'altra finestra.
 
 **Se un modello sembra improvvisamente lento o stupido, non è il modello.**
 
@@ -230,28 +294,46 @@ al limite, l'unico dato affidabile è quello preso sulla propria macchina.
 
 ---
 
-## Cosa contiene il repository
+## Gli obiettivi raggiunti
 
-```
-CLAUDE.md                    documentazione operativa completa e dieci lezioni
-docs/index.md                questa pagina
-start-stack.bat              accende tutto, attende ogni servizio, stampa gli indirizzi
-stop-stack.bat               spegne tutto e libera VRAM, RAM e macchina virtuale
-trascrivi.bat                trascrizione da riga di comando, anche drag and drop
-gui.bat + gui/               interfaccia web per il doppiaggio di registrazioni
-tts-proxy/                   proxy di rilevamento lingua, sola libreria standard
-tests/                       22 verifiche eseguibili senza GPU né servizi
-scripts/                     diagnostica VRAM, liberazione GPU, riavvii puliti
-comfyui/                     workflow testati per immagini e video
-open-webui/                   configurazione del container
-```
+Il progetto e' partito da una domanda sola, cosa entra davvero in sedici gigabyte, e questi sono
+i punti in cui si e' fermato:
 
-Due script gestiscono l'intero ciclo di vita. Lo spegnimento libera **tutte** le risorse, GPU,
-RAM e macchina virtuale: perché il presupposto è che chi lo lancia abbia bisogno del computer
-per altro.
+**Indipendenza completa.** Conversazione, ricerca web, trascrizione, traduzione, sintesi vocale,
+immagini e video girano senza una chiave API e senza che un dato esca dalla macchina. La ricerca
+passa da un motore in casa, quindi nemmeno la query viene registrata da qualcun altro.
+
+**Una catena, non sette strumenti.** Da un file audio o video si arriva a trascrizione,
+sottotitoli tradotti battuta per battuta e capitoli, in un passaggio. I timestamp restano
+identici al millesimo attraverso la traduzione, perche' il modello sceglie il numero della battuta
+e l'orario lo copia il codice: la differenza fra un sottotitolo che regge e uno che slitta.
+
+**Le registrazioni di riunioni vere.** Tracce audio separate riconosciute e trascritte una per
+una, la voce di chi registra separata da quella degli altri anche quando il microfono ha ripreso
+le casse, e i partecipanti distinti fra loro dalla diarizzazione. Due ore di audio in tre minuti.
+
+**Modelli locali che toccano i file, dentro regole precise.** Un agente confinato in una
+cartella puo' elencare, leggere e cercare, con un registro di ogni accesso e una lista bianca dei
+comandi. Legge i PDF veri, compresi quelli da ufficio con le codifiche che rendono il testo
+illeggibile agli estrattori ingenui, i documenti Office, e **le tabelle incollate come
+screenshot**, che per qualunque ricerca testuale non esistono: quelle le trascrive un modello che
+vede. E quando non puo' verificare qualcosa lo dichiara, invece di confondere il non trovato con
+il non esserci.
+
+**Un solo posto da cui accendere.** Una pagina mostra quanta memoria video resta prima di
+decidere, accende le dipendenze da se', avvisa quando una scelta manderebbe in paginazione un
+modello gia' caricato, e libera la GPU senza spegnere niente. Spegnere significa liberare tutto,
+macchina virtuale compresa, perche' chi lo fa ha bisogno del computer per altro.
+
+**La scelta dei modelli fatta su misure, non su classifiche.** Il modello con il punteggio piu'
+alto fra quelli che entrano in scheda non ha vinto nessuna delle dodici domande di una prova di
+competenza, ed e' stato rimosso. Quello che resta e' stato scelto perche' usa gli strumenti
+invece di rispondere a memoria.
+
+**Le trappole documentate mentre costavano tempo**, che e' la parte che vale piu' del codice: chi
+riprende il progetto non paga due volte la stessa diagnosi.
 
 ---
-
 
 ## La conclusione onesta
 
